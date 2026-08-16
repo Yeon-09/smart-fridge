@@ -1,0 +1,23 @@
+{
+  "name": "冰箱信号灯",
+  "short_name": "冰箱信号灯",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#38bdf8",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxOTIgMTkyIj48Y2lyY2xlIGN4PSI5NiIgY3k9Ijk2IiByPSI4OCIgc3Ryb2tlPSIjMzM0MTU1IiBzdHJva2Utd2lkdGg9IjciIGZpbGw9IiMxZTI5M2IiLz48Y2lyY2xlIGN4PSI5NiIgY3k9IjU2IiByPSIyMyIgZmlsbD0iI2Y4NzE3MSIvPjxjaXJjbGUgY3g9Ijk2IiBjeT0iOTYiIHI9IjIzIiBmaWxsPSIjZmFjYzE1Ii8+PGNpcmNsZSBjeD0iOTYiIGN5PSIxMzYiIHI9IjIzIiBmaWxsPSIjNGFkZTgwIi8+PC9zdmc+",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjIzNiIgc3Ryb2tlPSIjMzM0MTU1IiBzdHJva2Utd2lkdGg9IjE4IiBmaWxsPSIjMWUyOTNiIi8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMTUyIiByPSI2MiIgZmlsbD0iI2Y4NzE3MSIvPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI1NiIgcj0iNjIiIGZpbGw9IiNmYWNjMTUiLz48Y2lyY2xlIGN4PSIyNTYiIGN5PSIzNjAiIHI9IjYyIiBmaWxsPSIjNGFkZTgwIi8+PC9zdmc+",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,2197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>冰箱信号灯</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#38bdf8">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  /* ============ CSS Variables ============ */
+  :root {
+    --bg-start: #0f172a;
+    --bg-end: #1e293b;
+    --glass-bg: rgba(30, 41, 59, 0.7);
+    --glass-border: rgba(148, 163, 184, 0.1);
+    --glass-hover: rgba(148, 163, 184, 0.18);
+    --primary: #38bdf8;
+    --primary-hover: #0ea5e9;
+    --primary-glow: rgba(56, 189, 248, 0.35);
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    /* 信号灯三色（按规格） */
+    --green: #4ade80;
+    --yellow: #facc15;
+    --red: #f87171;
+    --radius: 16px;
+    --radius-sm: 10px;
+    --transition: 0.3s ease;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(135deg, var(--bg-start) 0%, var(--bg-end) 100%);
+    color: var(--text-primary);
+    min-height: 100vh;
+    padding: 28px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    color-scheme: dark; /* 让原生日期选择器适配深色 */
+  }
+
+  .container { max-width: 1100px; margin: 0 auto; }
+
+  /* ============ Navigation Bar ============ */
+  .navbar {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius);
+    padding: 20px 28px; margin-bottom: 24px;
+  }
+  .navbar h1 {
+    font-size: 1.7rem; font-weight: 700; letter-spacing: 0.5px;
+    background: linear-gradient(135deg, var(--primary), #818cf8);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .lang-btn {
+    background: transparent; color: var(--primary);
+    border: 1px solid var(--primary);
+    padding: 8px 18px; border-radius: 999px; cursor: pointer;
+    font-size: 0.9rem; font-weight: 600; transition: all var(--transition);
+    font-family: inherit;
+  }
+  .lang-btn:hover { background: var(--primary-glow); box-shadow: 0 0 16px var(--primary-glow); }
+
+  /* ============ Glass Card Base ============ */
+  .card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius);
+    padding: 28px; margin-bottom: 24px;
+  }
+
+  /* ============ Dashboard ============ */
+  .dashboard { display: flex; align-items: center; gap: 36px; flex-wrap: wrap; }
+  .signal-light {
+    width: 120px; height: 120px; border-radius: 50%;
+    background: rgba(148, 163, 184, 0.15);
+    border: 2px solid rgba(148, 163, 184, 0.25);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; flex-direction: column; gap: 4px;
+    position: relative; transition: all var(--transition);
+  }
+  .signal-light .signal-label {
+    font-size: 0.85rem; color: var(--text-secondary);
+    font-weight: 600; text-align: center; position: relative; z-index: 2; padding: 0 8px;
+  }
+  /* 发光层 */
+  .signal-light::after {
+    content: ""; position: absolute; inset: 0; border-radius: 50%;
+    pointer-events: none; transition: box-shadow var(--transition);
+  }
+  .signal-light.green { background: rgba(74, 222, 128, 0.15); border-color: var(--green); }
+  .signal-light.green::after { box-shadow: 0 0 30px rgba(74, 222, 128, 0.6); }
+  .signal-light.yellow { background: rgba(250, 204, 21, 0.15); border-color: var(--yellow); }
+  .signal-light.yellow::after { box-shadow: 0 0 30px rgba(250, 204, 21, 0.6); }
+  .signal-light.red { background: rgba(248, 113, 113, 0.15); border-color: var(--red); }
+  .signal-light.red::after { box-shadow: 0 0 30px rgba(248, 113, 113, 0.6); animation: breathe 2s ease-in-out infinite; }
+  /* 红灯呼吸：opacity 在 0.6-1 之间循环 */
+  @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+  .stat-cards { display: flex; gap: 16px; flex: 1; flex-wrap: wrap; }
+  .stat-card {
+    flex: 1; min-width: 130px; padding: 20px;
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius);
+    border-left: 4px solid var(--text-secondary);
+    transition: all var(--transition);
+  }
+  .stat-card.green { border-left-color: var(--green); }
+  .stat-card.yellow { border-left-color: var(--yellow); }
+  .stat-card.red { border-left-color: var(--red); }
+  .stat-card .stat-label { font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 8px; }
+  .stat-card .stat-value { font-size: 2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  /* ============ Action Bar ============ */
+  .action-bar { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .search-wrap { position: relative; flex: 1; min-width: 220px; }
+  .search-wrap svg {
+    position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+    width: 18px; height: 18px; color: var(--text-secondary); pointer-events: none;
+  }
+  .search-input {
+    width: 100%; background: rgba(15, 23, 42, 0.6);
+    border: 1px solid var(--glass-border); border-radius: var(--radius-sm);
+    padding: 12px 38px 12px 42px; color: var(--text-primary);
+    font-size: 0.95rem; transition: all var(--transition); font-family: inherit;
+  }
+  .search-input::placeholder { color: var(--text-secondary); }
+  .search-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-glow); }
+  .filter-group {
+    display: flex; gap: 8px; background: rgba(15, 23, 42, 0.5);
+    border: 1px solid var(--glass-border); border-radius: var(--radius-sm); padding: 4px;
+  }
+  .filter-btn {
+    background: transparent; border: none; color: var(--text-secondary);
+    padding: 8px 16px; border-radius: 8px; cursor: pointer;
+    font-size: 0.88rem; font-weight: 600; transition: all var(--transition); font-family: inherit;
+  }
+  .filter-btn:hover { color: var(--text-primary); }
+  .filter-btn.active { background: var(--primary); color: #0f172a; }
+  .add-btn {
+    background: var(--primary); color: #0f172a; border: none;
+    padding: 12px 24px; border-radius: var(--radius-sm); cursor: pointer;
+    font-size: 0.95rem; font-weight: 700; transition: all var(--transition);
+    box-shadow: 0 4px 16px var(--primary-glow); font-family: inherit;
+  }
+  .add-btn:hover { background: var(--primary-hover); transform: translateY(-1px); box-shadow: 0 6px 22px var(--primary-glow); }
+  .add-btn.secondary {
+    background: rgba(148, 163, 184, 0.15); color: var(--text-primary);
+    box-shadow: none; border: 1px solid var(--glass-border);
+  }
+  .add-btn.secondary:hover { background: rgba(56, 189, 248, 0.15); color: var(--primary); border-color: var(--primary); }
+  .icon-btn.settings-btn {
+    width: 42px; height: 42px; padding: 0; border-radius: var(--radius-sm);
+    background: rgba(148, 163, 184, 0.12); border: 1px solid var(--glass-border);
+    color: var(--text-primary);
+  }
+  .icon-btn.settings-btn:hover { background: var(--primary-glow); color: var(--primary); }
+  .icon-btn.settings-btn svg { width: 18px; height: 18px; }
+
+  /* 搜索清除按钮 */
+  .search-wrap .clear-btn {
+    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    width: 22px; height: 22px; border-radius: 50%; border: none;
+    background: rgba(148, 163, 184, 0.2); color: var(--text-secondary);
+    cursor: pointer; display: none; align-items: center; justify-content: center;
+    transition: all 0.2s; padding: 0;
+  }
+  .search-wrap .clear-btn.show { display: flex; }
+  .search-wrap .clear-btn:hover { background: rgba(248, 113, 113, 0.3); color: var(--red); }
+  .search-wrap .clear-btn svg { width: 12px; height: 12px; }
+
+  /* 筛选工具组（状态 + 分类 + 排序） */
+  .filter-tools { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .category-filter {
+    background: rgba(15, 23, 42, 0.5); border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm); padding: 9px 14px; color: var(--text-primary);
+    font-size: 0.88rem; font-weight: 600; font-family: inherit;
+    cursor: pointer; transition: all var(--transition);
+  }
+  .category-filter:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-glow); }
+  .category-filter option { background: #1e293b; }
+  .sort-btn {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(15, 23, 42, 0.5); border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm); padding: 9px 14px; color: var(--text-primary);
+    font-size: 0.88rem; font-weight: 600; font-family: inherit;
+    cursor: pointer; transition: all var(--transition);
+  }
+  .sort-btn:hover { border-color: var(--primary); color: var(--primary); }
+  .sort-btn svg { width: 16px; height: 16px; }
+
+  /* ============ Stats Row (统计面板) ============ */
+  .stats-row {
+    display: flex; gap: 16px; margin-top: 24px; padding-top: 24px;
+    border-top: 1px solid var(--glass-border); flex-wrap: wrap;
+  }
+  .stat-pill {
+    flex: 1; min-width: 160px; padding: 14px 18px;
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius);
+    display: flex; align-items: center; gap: 14px;
+  }
+  .stat-pill .sp-icon {
+    width: 42px; height: 42px; flex-shrink: 0; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(56, 189, 248, 0.1); color: var(--primary);
+  }
+  .stat-pill .sp-icon svg { width: 22px; height: 22px; }
+  .stat-pill.warn .sp-icon { background: rgba(250, 204, 21, 0.12); color: var(--yellow); }
+  .stat-pill.danger .sp-icon { background: rgba(248, 113, 113, 0.12); color: var(--red); }
+  .stat-pill .sp-body { flex: 1; min-width: 0; }
+  .stat-pill .sp-label { font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 2px; }
+  .stat-pill .sp-value { font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stat-pill.ring {
+    flex: 2; min-width: 260px;
+  }
+  .ring-wrap { position: relative; width: 62px; height: 62px; flex-shrink: 0; }
+  .ring-wrap svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ring-bg { stroke: rgba(148, 163, 184, 0.15); fill: none; stroke-width: 8; }
+  .ring-fg { stroke: var(--primary); fill: none; stroke-width: 8; stroke-linecap: round; transition: stroke-dashoffset 0.6s ease, stroke 0.3s; }
+  .ring-text {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 0.85rem; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums;
+  }
+
+  /* ============ Checkbox (食材卡片 + 购物清单) ============ */
+  .cb {
+    width: 20px; height: 20px; border-radius: 6px; flex-shrink: 0;
+    background: rgba(15, 23, 42, 0.6); border: 2px solid rgba(148, 163, 184, 0.35);
+    cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+    transition: all 0.2s; appearance: none; -webkit-appearance: none; padding: 0;
+  }
+  .cb:hover { border-color: var(--primary); }
+  .cb:checked { background: var(--primary); border-color: var(--primary); }
+  .cb:checked::after {
+    content: ""; width: 5px; height: 10px;
+    border: solid #0f172a; border-width: 0 2px 2px 0;
+    transform: rotate(45deg) translate(-1px, -1px);
+  }
+  .card-check { position: absolute; top: 10px; right: 10px; opacity: 0; transition: opacity 0.2s; }
+  .food-card:hover .card-check { opacity: 1; }
+
+  /* ============ Settings Menu ============ */
+  .settings-wrap { position: relative; }
+  .settings-menu {
+    position: absolute; top: calc(100% + 8px); right: 0;
+    background: rgba(30, 41, 59, 0.98); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border); border-radius: var(--radius-sm);
+    padding: 6px; min-width: 200px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4); z-index: 50;
+    display: none;
+  }
+  .settings-menu.show { display: block; animation: fadeDown 0.2s ease; }
+  @keyframes fadeDown { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+  .settings-menu .m-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px; border-radius: 8px; cursor: pointer;
+    color: var(--text-primary); font-size: 0.9rem; font-weight: 500;
+    transition: background 0.2s; background: transparent; border: none; width: 100%;
+    text-align: left; font-family: inherit;
+  }
+  .settings-menu .m-item:hover { background: rgba(56, 189, 248, 0.12); color: var(--primary); }
+  .settings-menu .m-item svg { width: 16px; height: 16px; }
+  .settings-menu .m-item input[type=file] { display: none; }
+
+  /* ============ Shopping List Section ============ */
+  .shopping-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 16px; gap: 10px; flex-wrap: wrap;
+  }
+  .shopping-title-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .shopping-title-row h2 { font-size: 1.25rem; color: var(--text-primary); margin: 0; }
+  .shopping-count {
+    background: rgba(56, 189, 248, 0.12); color: var(--primary);
+    padding: 3px 12px; border-radius: 999px; font-size: 0.82rem; font-weight: 700;
+  }
+  .shopping-actions { display: flex; gap: 10px; align-items: center; }
+  .text-btn {
+    background: transparent; border: none; color: var(--text-secondary);
+    padding: 8px 14px; border-radius: 8px; cursor: pointer;
+    font-size: 0.88rem; font-weight: 600; transition: all 0.2s; font-family: inherit;
+  }
+  .text-btn:hover { color: var(--red); background: rgba(248, 113, 113, 0.1); }
+  .text-btn.toggle { color: var(--primary); }
+  .text-btn.toggle:hover { background: var(--primary-glow); color: var(--primary); }
+  .shopping-body { overflow: hidden; transition: max-height 0.35s ease, opacity 0.3s ease; }
+  .shopping-body.collapsed { max-height: 0 !important; opacity: 0; }
+  .shopping-body-inner { display: flex; flex-direction: column; gap: 8px; }
+  .shop-item {
+    display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+    background: rgba(15, 23, 42, 0.5); border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm); transition: all 0.2s;
+  }
+  .shop-item:hover { border-color: var(--glass-hover); }
+  .shop-item.bought .shop-name { text-decoration: line-through; color: var(--text-secondary); }
+  .shop-item.bought { opacity: 0.75; }
+  .shop-emoji { font-size: 1.15rem; }
+  .shop-name { flex: 1; font-weight: 600; color: var(--text-primary); word-break: break-word; }
+  .shop-cat {
+    font-size: 0.72rem; color: var(--text-secondary);
+    background: rgba(148, 163, 184, 0.12); padding: 2px 8px; border-radius: 999px;
+  }
+  .shop-empty {
+    text-align: center; padding: 36px 20px; color: var(--text-secondary);
+    font-size: 0.92rem;
+  }
+
+  /* ============ Toast ============ */
+  .toast {
+    position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%);
+    background: rgba(30, 41, 59, 0.96); color: var(--text-primary);
+    border: 1px solid var(--glass-border); border-radius: 10px;
+    padding: 10px 20px; font-size: 0.9rem; font-weight: 500;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+    opacity: 0; pointer-events: none; z-index: 200;
+    transition: opacity 0.25s, transform 0.25s;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+
+  /* ============ Food List ============ */
+  .list-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+  .list-header h2 { font-size: 1.25rem; color: var(--text-primary); }
+  .list-header .count-badge {
+    font-size: 0.85rem; color: var(--text-secondary);
+    background: rgba(148, 163, 184, 0.1); padding: 4px 12px; border-radius: 999px;
+  }
+  .food-list { display: flex; flex-direction: column; gap: 12px; }
+
+  /* 食材卡片 */
+  .food-card {
+    position: relative; display: flex; align-items: center; gap: 14px;
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px; padding: 16px 16px 16px 24px;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    animation: slideUp 0.3s ease; overflow: hidden;
+  }
+  /* 左侧 4px 色条 */
+  .food-card::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+    background: var(--card-color, var(--text-secondary));
+  }
+  .food-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); }
+  .food-card.removing { animation: removeCard 0.3s ease forwards; }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes removeCard { to { opacity: 0; transform: scale(0.92) translateY(-8px); } }
+
+  .card-main { flex: 1; min-width: 0; }
+  .card-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .card-emoji { font-size: 1.3rem; }
+  .card-name { font-weight: 700; font-size: 1.05rem; color: var(--text-primary); word-break: break-word; }
+  .card-cat {
+    font-size: 0.75rem; color: var(--text-secondary);
+    background: rgba(148, 163, 184, 0.12); padding: 2px 10px; border-radius: 999px;
+  }
+  .card-meta { font-size: 0.82rem; color: var(--text-secondary); margin-top: 4px; }
+  .card-days {
+    font-size: 1.1rem; font-weight: 700; font-variant-numeric: tabular-nums;
+    text-align: right; min-width: 96px; white-space: nowrap;
+  }
+  .card-days.fresh { color: var(--green); }
+  .card-days.expiring { color: var(--yellow); }
+  .card-days.expired { color: var(--red); }
+  .card-actions { display: flex; gap: 6px; opacity: 0; transition: opacity 0.2s; }
+  .food-card:hover .card-actions { opacity: 1; }
+  .icon-btn {
+    background: rgba(148, 163, 184, 0.1); border: none;
+    width: 32px; height: 32px; border-radius: 8px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-secondary); transition: all 0.2s;
+  }
+  .icon-btn:hover { background: var(--primary-glow); color: var(--primary); }
+  .icon-btn.del:hover { background: rgba(248, 113, 113, 0.2); color: var(--red); }
+  .icon-btn svg { width: 16px; height: 16px; }
+
+  /* 空状态 */
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--text-secondary); }
+  .empty-state .empty-icon { font-size: 3rem; margin-bottom: 16px; opacity: 0.5; }
+  .empty-state .empty-text { font-size: 1rem; }
+
+  /* ============ Shopping List (placeholder) ============ */
+  .shopping-section h2 { font-size: 1.25rem; margin-bottom: 16px; color: var(--text-primary); }
+  .shopping-placeholder {
+    text-align: center; padding: 40px 20px; color: var(--text-secondary);
+    font-size: 0.95rem; border: 1px dashed var(--glass-border); border-radius: var(--radius-sm);
+  }
+
+  /* ============ Modal ============ */
+  .modal-mask {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+    display: none; align-items: center; justify-content: center; z-index: 100; padding: 16px;
+  }
+  .modal-mask.show { display: flex; }
+  .modal {
+    background: rgba(30, 41, 59, 0.95);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius); padding: 28px;
+    width: 100%; max-width: 440px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    transform: scale(0.9); opacity: 0;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+  }
+  .modal-mask.show .modal { transform: scale(1); opacity: 1; }
+  .modal h3 { font-size: 1.25rem; margin-bottom: 20px; color: var(--text-primary); }
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 6px; font-weight: 600; }
+  .form-group input, .form-group select {
+    width: 100%; padding: 11px 14px; background: rgba(15, 23, 42, 0.6);
+    border: 1px solid var(--glass-border); border-radius: 10px;
+    color: var(--text-primary); font-size: 0.95rem; font-family: inherit;
+    transition: border 0.2s, box-shadow 0.2s;
+  }
+  .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-glow); }
+  .form-group select option { background: #1e293b; color: var(--text-primary); }
+  .form-row { display: flex; gap: 12px; }
+  .form-row .form-group { flex: 1; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 22px; }
+  .btn {
+    flex: 1; padding: 12px; border-radius: 10px; border: none; cursor: pointer;
+    font-size: 0.95rem; font-weight: 700; font-family: inherit; transition: all 0.2s;
+  }
+  .btn-primary { background: var(--primary); color: #0f172a; }
+  .btn-primary:hover { background: var(--primary-hover); }
+  .btn-cancel { background: rgba(148, 163, 184, 0.12); color: var(--text-secondary); }
+  .btn-cancel:hover { background: rgba(148, 163, 184, 0.2); color: var(--text-primary); }
+
+  /* 存储位置按钮组（弹窗内） */
+  .loc-btn-group { display: flex; gap: 8px; }
+  .loc-btn {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 11px 8px; border-radius: 10px; cursor: pointer;
+    background: transparent; border: 1px solid var(--glass-border);
+    color: var(--text-secondary); font-size: 0.9rem; font-weight: 600;
+    font-family: inherit; transition: all var(--transition);
+  }
+  .loc-btn:hover { border-color: var(--primary); color: var(--text-primary); }
+  .loc-btn.active { background: var(--primary); border-color: var(--primary); color: #0f172a; }
+  .loc-btn .loc-emoji { font-size: 1rem; }
+  .loc-hint { margin-top: 8px; font-size: 0.78rem; color: var(--text-secondary); line-height: 1.5; }
+  .loc-warn {
+    margin-top: 6px; font-size: 0.78rem; color: var(--red);
+    background: rgba(248, 113, 113, 0.1); padding: 6px 10px; border-radius: 8px;
+  }
+
+  /* 食材卡片存储位置标签 */
+  .card-loc {
+    font-size: 0.72rem; padding: 2px 10px; border-radius: 999px;
+    font-weight: 600; white-space: nowrap;
+  }
+  .card-loc.loc-fridge { background: rgba(56, 189, 248, 0.14); color: #7dd3fc; }
+  .card-loc.loc-freezer { background: rgba(186, 230, 253, 0.12); color: #bae6fd; }
+  .card-loc.loc-room { background: rgba(251, 146, 60, 0.14); color: #fdba74; }
+
+  /* 位置筛选按钮组：emoji + 文字间距 */
+  .filter-group#locationFilter .filter-btn { display: inline-flex; align-items: center; gap: 4px; }
+
+  /* 仪表盘存储分布行 */
+  .loc-dist {
+    width: 100%; margin-top: 18px; padding-top: 16px;
+    border-top: 1px solid var(--glass-border);
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    font-size: 0.82rem;
+  }
+  .loc-dist-label { color: var(--text-secondary); font-weight: 600; }
+  .loc-dist-items { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .loc-dist-item { font-weight: 600; color: var(--text-primary); white-space: nowrap; }
+  .loc-dist-item.loc-fridge { color: #7dd3fc; }
+  .loc-dist-item.loc-freezer { color: #bae6fd; }
+  .loc-dist-item.loc-room { color: #fdba74; }
+  .loc-dist-sep { color: var(--text-secondary); }
+
+  /* ============ Stats Analysis Panel ============ */
+  .stats-analysis { padding-top: 20px; }
+  .sa-header {
+    display: flex; justify-content: space-between; align-items: center;
+    cursor: pointer; user-select: none; margin-bottom: 4px;
+  }
+  .sa-header h2 { font-size: 1.25rem; color: var(--text-primary); }
+  .sa-body { overflow: hidden; transition: max-height 0.35s ease, opacity 0.3s ease, margin-top 0.3s ease; }
+  .sa-body.collapsed { max-height: 0 !important; opacity: 0; margin-top: 0; }
+  .sa-body:not(.collapsed) { margin-top: 20px; }
+  .sa-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  }
+  .sa-chart-box {
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: 18px; position: relative;
+    display: flex; flex-direction: column;
+  }
+  .sa-chart-title {
+    font-size: 0.9rem; font-weight: 600; color: var(--text-secondary);
+    margin-bottom: 14px;
+  }
+  .sa-canvas-wrap { position: relative; height: 200px; width: 100%; }
+  .sa-doughnut-wrap { display: flex; align-items: center; justify-content: center; }
+  .sa-doughnut-center {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    font-size: 1.6rem; font-weight: 700; color: var(--text-primary);
+    font-variant-numeric: tabular-nums; pointer-events: none; text-align: center;
+  }
+  .sa-no-data {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: var(--text-secondary); font-size: 0.92rem; pointer-events: none;
+  }
+  /* 浪费率卡片 */
+  .sa-waste-card { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+  .sa-waste-num { font-size: 2.6rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
+  .sa-waste-sub { font-size: 0.85rem; color: var(--text-secondary); }
+  .sa-waste-num.green { color: var(--green); }
+  .sa-waste-num.yellow { color: var(--yellow); }
+  .sa-waste-num.red { color: var(--red); }
+
+  /* ============ PWA Install Banner ============ */
+  .pwa-banner {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 12px;
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.18), rgba(129, 140, 248, 0.18));
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--primary-glow);
+    border-radius: var(--radius);
+    padding: 12px 18px; margin-bottom: 20px;
+    box-shadow: 0 4px 20px rgba(56, 189, 248, 0.12);
+  }
+  .pwa-banner-text {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 0.92rem; font-weight: 600; color: var(--text-primary);
+  }
+  .pwa-banner-icon { font-size: 1.3rem; }
+  .pwa-banner-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .pwa-banner-actions button { padding: 6px 14px; }
+  #pwaInstallBtn { color: var(--primary); font-weight: 700; }
+  #pwaInstallBtn:hover { background: var(--primary-glow); }
+  #pwaDismissBtn { color: var(--text-secondary); }
+  #pwaDismissBtn:hover { color: var(--text-primary); }
+
+  /* ============ Fade Transition ============ */
+  .fade-wrap { transition: opacity 0.3s ease; }
+  .fade-out { opacity: 0; }
+
+  /* ============ Responsive ============ */
+  @media (max-width: 640px) {
+    body { padding: 16px; }
+    .navbar { padding: 16px 20px; }
+    .navbar h1 { font-size: 1.3rem; }
+    .card { padding: 20px; }
+    .dashboard { gap: 20px; }
+    .signal-light { width: 100px; height: 100px; }
+    .stat-card { min-width: calc(50% - 8px); padding: 16px; }
+    .stat-card .stat-value { font-size: 1.6rem; }
+    .action-bar { gap: 10px; }
+    .search-wrap { min-width: 100%; }
+    .filter-tools { width: 100%; }
+    .filter-group { flex: 1; }
+    .filter-btn { flex: 1; }
+    /* 位置筛选组在窄屏下独占一行，避免四个按钮过挤 */
+    .filter-group#locationFilter { flex: 1 1 100%; }
+    .filter-group#locationFilter .filter-btn { font-size: 0.78rem; padding: 8px 6px; }
+    .category-filter { flex: 1; }
+    .sort-btn { flex: 1; justify-content: center; }
+    .add-btn { width: 100%; }
+    .food-card { flex-wrap: wrap; padding: 14px 14px 14px 22px; }
+    .card-days { order: 3; min-width: 100%; text-align: left; }
+    .card-actions { order: 4; opacity: 1; margin-left: auto; }
+    /* 统计分析面板：窄屏单列堆叠 */
+    .sa-grid { grid-template-columns: 1fr; }
+    .sa-canvas-wrap { height: 180px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+    <!-- ============ PWA Install Banner ============ -->
+    <section class="pwa-banner" id="pwaBanner" style="display:none;">
+      <div class="pwa-banner-text">
+        <span class="pwa-banner-icon">📱</span>
+        <span data-i18n="installBanner">安装到桌面，离线也能用</span>
+      </div>
+      <div class="pwa-banner-actions">
+        <button class="text-btn" type="button" id="pwaInstallBtn" data-i18n="installNow">立即安装</button>
+        <button class="text-btn" type="button" id="pwaDismissBtn" aria-label="close">✕</button>
+      </div>
+    </section>
+
+  <!-- ============ Navigation Bar ============ -->
+  <nav class="navbar">
+    <h1 data-i18n="title">冰箱信号灯</h1>
+    <button class="lang-btn" id="langBtn">한국어</button>
+  </nav>
+
+  <!-- ============ Dashboard ============ -->
+  <section class="card dashboard fade-wrap" id="dashboard">
+    <div class="signal-light" id="signalLight">
+      <span class="signal-label" id="signalLabel">状态良好</span>
+    </div>
+    <div class="stat-cards">
+      <div class="stat-card green">
+        <div class="stat-label" data-i18n="fresh">新鲜</div>
+        <div class="stat-value" id="countFresh">0</div>
+      </div>
+      <div class="stat-card yellow">
+        <div class="stat-label" data-i18n="expiring">快过期</div>
+        <div class="stat-value" id="countExpiring">0</div>
+      </div>
+      <div class="stat-card red">
+        <div class="stat-label" data-i18n="expired">已过期</div>
+        <div class="stat-value" id="countExpired">0</div>
+      </div>
+    </div>
+    <!-- 统计行：总数 / 本周过期数 / 浪费率环形条 -->
+    <div class="stats-row" id="statsRow">
+      <div class="stat-pill">
+        <div class="sp-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-3V5a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2zM9 5h6v2H9V5z"/></svg>
+        </div>
+        <div class="sp-body">
+          <div class="sp-label" data-i18n="totalItems">食材总数</div>
+          <div class="sp-value" id="statTotal">0</div>
+        </div>
+      </div>
+      <div class="stat-pill warn">
+        <div class="sp-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        </div>
+        <div class="sp-body">
+          <div class="sp-label" data-i18n="expireThisWeek">本周过期数</div>
+          <div class="sp-value" id="statThisWeek">0</div>
+        </div>
+      </div>
+      <div class="stat-pill ring danger" title="浪费率（已过期数 / 总数）">
+        <div class="ring-wrap">
+          <svg viewBox="0 0 36 36">
+            <circle class="ring-bg" cx="18" cy="18" r="15"/>
+            <circle class="ring-fg" id="wasteRingFg" cx="18" cy="18" r="15"
+              stroke-dasharray="94.248" stroke-dashoffset="94.248"/>
+          </svg>
+          <div class="ring-text" id="wasteRingText">0%</div>
+        </div>
+        <div class="sp-body">
+          <div class="sp-label" data-i18n="wasteRate">浪费率</div>
+          <div class="sp-value" id="statWaste" style="font-size:1.15rem;margin-top:2px;color:var(--text-secondary);font-weight:500;" data-i18n="wasteRateHint">已过期食材 / 总数</div>
+        </div>
+      </div>
+    </div>
+    <!-- 存储位置分布 -->
+    <div class="loc-dist" id="locDist">
+      <span class="loc-dist-label" data-i18n="location_distribution">存储分布</span>
+      <span class="loc-dist-items" id="locDistItems"></span>
+    </div>
+  </section>
+
+  <!-- ============ Stats Analysis Panel ============ -->
+  <section class="card stats-analysis fade-wrap" id="statsAnalysis">
+    <div class="sa-header" id="saHeader">
+      <h2>📊 <span data-i18n="statsAnalysis">统计分析</span></h2>
+      <button class="text-btn toggle" id="saToggleBtn" type="button" data-i18n="collapse">收起</button>
+    </div>
+    <div class="sa-body" id="saBody">
+      <div class="sa-grid">
+        <!-- 图表1：分类占比饼图 -->
+        <div class="sa-chart-box">
+          <div class="sa-chart-title" data-i18n="categoryChart">分类占比</div>
+          <div class="sa-canvas-wrap">
+            <canvas id="categoryChart"></canvas>
+          </div>
+          <div class="sa-no-data" id="categoryNoData" data-i18n="noData" style="display:none;">暂无数据</div>
+        </div>
+        <!-- 图表2：存储位置环形图 -->
+        <div class="sa-chart-box">
+          <div class="sa-chart-title" data-i18n="locationChart">存储分布</div>
+          <div class="sa-canvas-wrap sa-doughnut-wrap">
+            <canvas id="locationChart"></canvas>
+            <div class="sa-doughnut-center" id="locationCenter">0</div>
+          </div>
+        </div>
+        <!-- 图表3：浪费率数字卡片 -->
+        <div class="sa-chart-box">
+          <div class="sa-chart-title" data-i18n="wasteRate">浪费率</div>
+          <div class="sa-waste-card">
+            <div class="sa-waste-num green" id="saWasteNum">0%</div>
+            <div class="sa-waste-sub" id="saWasteSub"></div>
+          </div>
+        </div>
+        <!-- 图表4：近7天过期趋势折线图 -->
+        <div class="sa-chart-box">
+          <div class="sa-chart-title" data-i18n="trendChart">近7天过期趋势</div>
+          <div class="sa-canvas-wrap">
+            <canvas id="trendChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Action Bar ============ -->
+  <section class="card action-bar fade-wrap" id="actionBar">
+    <div class="search-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input type="text" class="search-input" id="searchInput" data-i18n-placeholder="searchPlaceholder" placeholder="搜索食材名称...">
+      <button class="clear-btn" id="clearSearchBtn" type="button" aria-label="清除" data-i18n-aria="clearSearch">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="filter-tools">
+      <div class="filter-group" id="statusFilter">
+        <button class="filter-btn active" data-filter="all" data-i18n="filterAll">全部</button>
+        <button class="filter-btn" data-filter="expiring" data-i18n="filterExpiring">快过期</button>
+        <button class="filter-btn" data-filter="expired" data-i18n="filterExpired">已过期</button>
+      </div>
+      <select class="category-filter" id="categoryFilter">
+        <option value="all" data-i18n="filterAllCategory">全部分类</option>
+        <option value="vegetable" data-emoji="🥬" data-i18n="category_vegetable">🥬 蔬菜</option>
+        <option value="meat" data-emoji="🥩" data-i18n="category_meat">🥩 肉类</option>
+        <option value="dairy" data-emoji="🥛" data-i18n="category_dairy">🥛 乳制品</option>
+        <option value="fruit" data-emoji="🍎" data-i18n="category_fruit">🍎 水果</option>
+        <option value="seasoning" data-emoji="🧂" data-i18n="category_seasoning">🧂 调料</option>
+        <option value="other" data-emoji="🥚" data-i18n="category_other">🥚 其他</option>
+      </select>
+      <div class="filter-group" id="locationFilter">
+        <button class="filter-btn active" data-locfilter="all" data-i18n="filter_all_locations">全部位置</button>
+        <button class="filter-btn" data-locfilter="fridge">❄️<span data-i18n="location_fridge">冷藏</span></button>
+        <button class="filter-btn" data-locfilter="freezer">🧊<span data-i18n="location_freezer">冷冻</span></button>
+        <button class="filter-btn" data-locfilter="room">🌡️<span data-i18n="location_room">室温</span></button>
+      </div>
+      <button class="sort-btn" id="sortBtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M6 12h12M10 18h4"/></svg>
+        <span id="sortLabel">按剩余天数</span>
+      </button>
+    </div>
+    <button class="add-btn secondary" id="addShopBtn" data-i18n="addToShoppingList">加入购物清单</button>
+    <button class="add-btn" id="addBtn" data-i18n="addBtn">+ 添加食材</button>
+    <div class="settings-wrap">
+      <button class="icon-btn settings-btn" id="settingsBtn" type="button" data-i18n-aria="settings" aria-label="设置">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+      <div class="settings-menu" id="settingsMenu" role="menu">
+        <button class="m-item" id="exportBtn" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span data-i18n="exportData">导出数据</span>
+        </button>
+        <label class="m-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <span data-i18n="importData">导入数据</span>
+          <input type="file" id="importFile" accept="application/json,.json">
+        </label>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Food List ============ -->
+  <section class="card fade-wrap" id="foodListSection">
+    <div class="list-header">
+      <h2 data-i18n="listTitle">食材列表</h2>
+      <span class="count-badge" id="listCount">0</span>
+    </div>
+    <div class="food-list" id="foodList"></div>
+    <div class="empty-state" id="emptyState">
+      <div class="empty-icon">🧊</div>
+      <div class="empty-text" id="emptyText">冰箱空空如也，点击添加食材吧</div>
+    </div>
+  </section>
+
+  <!-- ============ Shopping List ============ -->
+  <section class="card shopping-section fade-wrap" id="shoppingSection">
+    <div class="shopping-header">
+      <div class="shopping-title-row">
+        <h2 data-i18n="shoppingTitle">购物清单</h2>
+        <span class="shopping-count" id="shopCount">0</span>
+      </div>
+      <div class="shopping-actions">
+        <button class="text-btn" id="clearBoughtBtn" data-i18n="clearBought">清除已购买</button>
+        <button class="text-btn toggle" id="toggleShopBtn" data-i18n="collapse">收起</button>
+      </div>
+    </div>
+    <div class="shopping-body" id="shoppingBody">
+      <div class="shopping-body-inner" id="shoppingInner"></div>
+    </div>
+  </section>
+
+</div>
+
+<!-- ============ Add / Edit Modal ============ -->
+<div class="modal-mask" id="modalMask">
+  <div class="modal">
+    <h3 id="modalTitle">添加食材</h3>
+    <form id="foodForm">
+      <div class="form-group">
+        <label data-i18n="name">名称</label>
+        <input type="text" id="inpName" data-i18n-placeholder="namePlaceholder" placeholder="请输入食材名称" required>
+      </div>
+      <div class="form-group">
+        <label data-i18n="category">分类</label>
+        <select id="inpCategory">
+          <option value="vegetable" data-emoji="🥬" data-i18n="category_vegetable">🥬 蔬菜</option>
+          <option value="meat" data-emoji="🥩" data-i18n="category_meat">🥩 肉类</option>
+          <option value="dairy" data-emoji="🥛" data-i18n="category_dairy">🥛 乳制品</option>
+          <option value="fruit" data-emoji="🍎" data-i18n="category_fruit">🍎 水果</option>
+          <option value="seasoning" data-emoji="🧂" data-i18n="category_seasoning">🧂 调料</option>
+          <option value="other" data-emoji="🥚" data-i18n="category_other">🥚 其他</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label data-i18n="location">存储位置</label>
+        <div class="loc-btn-group" id="locBtnGroup">
+          <button type="button" class="loc-btn active" data-loc="fridge">
+            <span class="loc-emoji">❄️</span><span data-i18n="location_fridge">冷藏</span>
+          </button>
+          <button type="button" class="loc-btn" data-loc="freezer">
+            <span class="loc-emoji">🧊</span><span data-i18n="location_freezer">冷冻</span>
+          </button>
+          <button type="button" class="loc-btn" data-loc="room">
+            <span class="loc-emoji">🌡️</span><span data-i18n="location_room">室温</span>
+          </button>
+        </div>
+        <div class="loc-hint" id="locHint" data-i18n="shelfLifeHint">不同存储位置保质期不同，可手动调整</div>
+        <div class="loc-warn" id="locWarn" style="display:none;" data-i18n="locationNotRecommended">该分类不建议此存储位置，请冷藏或冷冻</div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label data-i18n="addedDate">放入日期</label>
+          <input type="date" id="inpAddedDate" required>
+        </div>
+        <div class="form-group">
+          <label data-i18n="shelfLife">保质期天数</label>
+          <input type="number" id="inpShelfLife" min="1" required>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-cancel" id="cancelBtn" data-i18n="cancel">取消</button>
+        <button type="submit" class="btn btn-primary" data-i18n="save">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ Toast ============ -->
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* =========================================================
+ * Module 1: i18n Dictionary
+ * 中韩双语翻译字典
+ * ======================================================= */
+const I18N = {
+  zh: {
+    title: "冰箱信号灯",
+    addBtn: "+ 添加食材",
+    searchPlaceholder: "搜索食材名称...",
+    filterAll: "全部",
+    filterExpiring: "快过期",
+    filterExpired: "已过期",
+    fresh: "新鲜",
+    expiring: "快过期",
+    expired: "已过期",
+    name: "名称",
+    category: "分类",
+    addedDate: "放入日期",
+    shelfLife: "保质期天数",
+    daysLeft: "剩余天数",
+    expiredDays: "过期天数",
+    edit: "编辑",
+    delete: "删除",
+    category_vegetable: "蔬菜",
+    category_meat: "肉类",
+    category_dairy: "乳制品",
+    category_fruit: "水果",
+    category_seasoning: "调料",
+    category_other: "其他",
+    statusGood: "状态良好",
+    statusWarning: "需要留意",
+    statusDanger: "存在风险",
+    listTitle: "食材列表",
+    emptyText: "冰箱空空如也，点击添加食材吧",
+    noResults: "没有匹配的食材",
+    shoppingTitle: "购物清单",
+    shoppingPlaceholder: "购物清单功能即将上线，敬请期待～",
+    // 弹窗与操作相关
+    modalAddTitle: "添加食材",
+    modalEditTitle: "编辑食材",
+    save: "保存",
+    cancel: "取消",
+    namePlaceholder: "请输入食材名称",
+    confirmDelete: "确认删除该食材吗？",
+    day: "天",
+    expiredPrefix: "已过期",
+    leftPrefix: "剩余",
+    // 搜索 / 筛选 / 排序相关
+    filterAllCategory: "全部分类",
+    sortByRemaining: "按剩余天数",
+    sortByAddedDate: "按放入日期",
+    emptyExpiring: "没有快过期的食材",
+    emptyExpired: "没有已过期的食材",
+    emptyCategory: "没有该分类的食材",
+    notFound: "没有找到",
+    clearSearch: "清除",
+    // 购物清单
+    addToShoppingList: "加入购物清单",
+    shoppingListEmpty: "购物清单为空，去食材列表勾选并添加吧",
+    clearBought: "清除已购买",
+    boughtItem: "已购买",
+    notBoughtItem: "未购买",
+    collapse: "收起",
+    expand: "展开",
+    selectToAdd: "请先勾选要添加的食材",
+    addedToList: "已添加到购物清单",
+    alreadyInList: "已在购物清单中，跳过重复项",
+    // 设置
+    settings: "设置",
+    exportData: "导出数据",
+    importData: "导入数据",
+    selectFile: "请选择 JSON 文件",
+    importConfirm: "导入将覆盖当前所有数据，确定继续吗？",
+    importSuccess: "导入成功",
+    importFailed: "导入失败：文件格式不正确",
+    // 统计面板
+    totalItems: "食材总数",
+    expireThisWeek: "本周过期数",
+    wasteRate: "浪费率",
+    wasteRateHint: "已过期食材 / 总数",
+    // 存储位置
+    location: "存储位置",
+    location_fridge: "冷藏",
+    location_freezer: "冷冻",
+    location_room: "室温",
+    shelfLifeHint: "不同存储位置保质期不同，可手动调整",
+    locationNotRecommended: "该分类不建议此存储位置，请冷藏或冷冻",
+    filter_all_locations: "全部位置",
+    location_distribution: "存储分布",
+    // 统计分析面板
+    statsAnalysis: "统计分析",
+    categoryChart: "分类占比",
+    locationChart: "存储分布",
+    trendChart: "近7天过期趋势",
+    noData: "暂无数据",
+    expiredOfTotal: "已过期",
+    totalShort: "总数",
+    // PWA 安装提示
+    installBanner: "安装到桌面，离线也能用",
+    installNow: "立即安装"
+  },
+  ko: {
+    title: "냉장고 신호등",
+    addBtn: "+ 식재료 추가",
+    searchPlaceholder: "식재료 이름 검색...",
+    filterAll: "전체",
+    filterExpiring: "임박",
+    filterExpired: "만료",
+    fresh: "신선함",
+    expiring: "임박",
+    expired: "만료",
+    name: "이름",
+    category: "분류",
+    addedDate: "보관 날짜",
+    shelfLife: "유통기한(일)",
+    daysLeft: "남은 일수",
+    expiredDays: "만료 일수",
+    edit: "수정",
+    delete: "삭제",
+    category_vegetable: "채소",
+    category_meat: "고기",
+    category_dairy: "유제품",
+    category_fruit: "과일",
+    category_seasoning: "양념",
+    category_other: "기타",
+    statusGood: "상태 양호",
+    statusWarning: "주의 필요",
+    statusDanger: "위험 상태",
+    listTitle: "식재료 목록",
+    emptyText: "냉장고가 비었습니다. 식재료를 추가하세요",
+    noResults: "일치하는 식재료가 없습니다",
+    shoppingTitle: "장보기 목록",
+    shoppingPlaceholder: "장보기 목록 기능이 곧 출시됩니다～",
+    modalAddTitle: "식재료 추가",
+    modalEditTitle: "식재료 수정",
+    save: "저장",
+    cancel: "취소",
+    namePlaceholder: "식재료 이름 입력",
+    confirmDelete: "이 식재료를 삭제하시겠습니까?",
+    day: "일",
+    expiredPrefix: "만료",
+    leftPrefix: "남음",
+    // 검색 / 필터 / 정렬 관련
+    filterAllCategory: "전체 분류",
+    sortByRemaining: "남은 일수순",
+    sortByAddedDate: "보관 날짜순",
+    emptyExpiring: "임박한 식재료가 없습니다",
+    emptyExpired: "만료된 식재료가 없습니다",
+    emptyCategory: "해당 분류의 식재료가 없습니다",
+    notFound: "찾을 수 없음",
+    clearSearch: "지우기",
+    // 장보기 목록
+    addToShoppingList: "장보기 목록에 추가",
+    shoppingListEmpty: "장보기 목록이 비었습니다. 식재료 목록에서 체크하여 추가하세요",
+    clearBought: "구매한 항목 지우기",
+    boughtItem: "구매 완료",
+    notBoughtItem: "미구매",
+    collapse: "접기",
+    expand: "펼치기",
+    selectToAdd: "추가할 식재료를 먼저 선택해주세요",
+    addedToList: "장보기 목록에 추가되었습니다",
+    alreadyInList: "이미 목록에 있어 중복 건너뛰기",
+    // 설정
+    settings: "설정",
+    exportData: "데이터 내보내기",
+    importData: "데이터 가져오기",
+    selectFile: "JSON 파일을 선택하세요",
+    importConfirm: "가져오기는 현재 모든 데이터를 덮어씁니다. 계속하시겠습니까?",
+    importSuccess: "가져오기 성공",
+    importFailed: "가져오기 실패: 올바르지 않은 파일 형식",
+    // 통계 패널
+    totalItems: "총 식재료 수",
+    expireThisWeek: "이번 주 만료 수",
+    wasteRate: "낭비율",
+    wasteRateHint: "만료된 식재료 / 총계",
+    // 보관 위치
+    location: "보관위치",
+    location_fridge: "냉장",
+    location_freezer: "냉동",
+    location_room: "실온",
+    shelfLifeHint: "보관위치에 따라 유통기한이 다릅니다. 직접 조정 가능합니다",
+    locationNotRecommended: "이 분류는 해당 보관위치를 권장하지 않습니다. 냉장 또는 냉동해 주세요",
+    filter_all_locations: "전체",
+    location_distribution: "보관분포",
+    // 통계 분석 패널
+    statsAnalysis: "통계 분석",
+    categoryChart: "분류 비율",
+    locationChart: "보관 분포",
+    trendChart: "최근 7일 만료 추세",
+    noData: "데이터 없음",
+    expiredOfTotal: "만료",
+    totalShort: "총계",
+    // PWA 설치 배너
+    installBanner: "홈 화면에 추가, 오프라인에서도 사용 가능",
+    installNow: "지금 설치"
+  }
+};
+
+/* =========================================================
+ * Module 2: Category & Location Config
+ * 分类配置：emoji + 各存储位置保质期预设（天）
+ * ======================================================= */
+// shelf: { fridge, freezer, room }；room 为 0 表示不可室温
+const CATEGORIES = {
+  vegetable: { emoji: "🥬", shelf: { fridge: 3,  freezer: 30, room: 1 } },
+  meat:      { emoji: "🥩", shelf: { fridge: 2,  freezer: 90, room: 0 } },
+  dairy:     { emoji: "🥛", shelf: { fridge: 7,  freezer: -1, room: 1 } },
+  fruit:     { emoji: "🍎", shelf: { fridge: 5,  freezer: 30, room: 3 } },
+  seasoning: { emoji: "🧂", shelf: { fridge: 30, freezer: 30, room: 30 } },
+  other:     { emoji: "🥚", shelf: { fridge: 7,  freezer: 30, room: 3 } }
+};
+
+// 存储位置配置：emoji + i18n key
+const LOCATIONS = {
+  fridge: { emoji: "❄️", i18n: "location_fridge" },
+  freezer:{ emoji: "🧊", i18n: "location_freezer" },
+  room:   { emoji: "🌡️", i18n: "location_room" }
+};
+const LOCATION_KEYS = ["fridge", "freezer", "room"];
+
+// 取某分类在某位置的保质期预设（不可用时返回 null）
+function getShelfPreset(category, location) {
+  const cat = CATEGORIES[category] || CATEGORIES.other;
+  const v = cat.shelf[location];
+  if (v === undefined || v <= 0) return null; // 0/-1 表示不可用
+  return v;
+}
+
+/* =========================================================
+ * Module 3: State Management
+ * 状态管理：语言、食材列表、筛选、搜索、编辑中 ID
+ * ======================================================= */
+const STORAGE_KEY = "fridgeItems";
+
+const State = {
+  lang: localStorage.getItem("fridge_lang") || "zh",
+  items: loadItems(),
+  shoppingList: loadShoppingList(),
+  shoppingCollapsed: localStorage.getItem("fridge_shopCollapsed") === "1",
+  statsCollapsed: localStorage.getItem("fridge_statsCollapsed") === "1",
+  filter: localStorage.getItem("fridge_filter") || "all",            // all | expiring | expired
+  categoryFilter: localStorage.getItem("fridge_catFilter") || "all", // all | vegetable | ...
+  locationFilter: localStorage.getItem("fridge_locFilter") || "all", // all | fridge | freezer | room
+  sortBy: localStorage.getItem("fridge_sort") || "remaining",        // remaining | addedDate
+  search: localStorage.getItem("fridge_search") || "",              // 搜索关键词
+  editingId: null,    // 当前编辑的食材 ID（null 表示新增）
+  selectedIds: new Set() // 当前卡片勾选的食材 ID（内存态，不持久化）
+};
+
+function loadItems() {
+  let arr;
+  try { arr = JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+  catch { arr = []; }
+  // 迁移：旧数据没有 location 字段，默认补 fridge
+  arr.forEach(it => {
+    if (!it.location || !LOCATION_KEYS.includes(it.location)) it.location = "fridge";
+  });
+  return arr;
+}
+function saveItems() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(State.items));
+}
+const SHOP_KEY = "shoppingList";
+function loadShoppingList() {
+  try { return JSON.parse(localStorage.getItem(SHOP_KEY)) || []; }
+  catch { return []; }
+}
+function saveShoppingList() {
+  localStorage.setItem(SHOP_KEY, JSON.stringify(State.shoppingList));
+}
+
+/* =========================================================
+ * Module 4: DOM References
+ * DOM 元素引用
+ * ======================================================= */
+const $ = (id) => document.getElementById(id);
+const DOM = {
+  langBtn: $("langBtn"),
+  dashboard: $("dashboard"),
+  actionBar: $("actionBar"),
+  foodListSection: $("foodListSection"),
+  shoppingSection: $("shoppingSection"),
+  signalLight: $("signalLight"),
+  signalLabel: $("signalLabel"),
+  foodList: $("foodList"),
+  emptyState: $("emptyState"),
+  emptyText: $("emptyText"),
+  listCount: $("listCount"),
+  searchInput: $("searchInput"),
+  clearSearchBtn: $("clearSearchBtn"),
+  categoryFilter: $("categoryFilter"),
+  locationFilter: $("locationFilter"),
+  sortBtn: $("sortBtn"),
+  sortLabel: $("sortLabel"),
+  addBtn: $("addBtn"),
+  addShopBtn: $("addShopBtn"),
+  settingsBtn: $("settingsBtn"),
+  settingsMenu: $("settingsMenu"),
+  exportBtn: $("exportBtn"),
+  importFile: $("importFile"),
+  toast: $("toast"),
+  // 统计行
+  statTotal: $("statTotal"),
+  statThisWeek: $("statThisWeek"),
+  statWaste: $("statWaste"),
+  wasteRingFg: $("wasteRingFg"),
+  wasteRingText: $("wasteRingText"),
+  locDistItems: $("locDistItems"),
+  // 购物清单
+  shoppingBody: $("shoppingBody"),
+  shoppingInner: $("shoppingInner"),
+  shopCount: $("shopCount"),
+  toggleShopBtn: $("toggleShopBtn"),
+  clearBoughtBtn: $("clearBoughtBtn"),
+  // 统计分析面板
+  statsAnalysis: $("statsAnalysis"),
+  saHeader: $("saHeader"),
+  saBody: $("saBody"),
+  saToggleBtn: $("saToggleBtn"),
+  categoryNoData: $("categoryNoData"),
+  locationCenter: $("locationCenter"),
+  saWasteNum: $("saWasteNum"),
+  saWasteSub: $("saWasteSub"),
+  // 弹窗
+  modalMask: $("modalMask"),
+  modalTitle: $("modalTitle"),
+  foodForm: $("foodForm"),
+  inpName: $("inpName"),
+  inpCategory: $("inpCategory"),
+  inpAddedDate: $("inpAddedDate"),
+  inpShelfLife: $("inpShelfLife"),
+  cancelBtn: $("cancelBtn"),
+  locBtnGroup: $("locBtnGroup"),
+  locHint: $("locHint"),
+  locWarn: $("locWarn"),
+  // PWA 安装提示条
+  pwaBanner: $("pwaBanner"),
+  pwaInstallBtn: $("pwaInstallBtn"),
+  pwaDismissBtn: $("pwaDismissBtn")
+};
+
+/* =========================================================
+ * Module 5: Date & Status Helpers
+ * 日期与信号灯状态计算
+ * ======================================================= */
+function todayStr() {
+  const d = new Date();
+  const tz = d.getTimezoneOffset() * 60000;
+  return new Date(d - tz).toISOString().slice(0, 10);
+}
+// 计算某日期距今天的天数（target - today）
+function daysFromToday(dateStr) {
+  const a = new Date(dateStr + "T00:00:00");
+  const b = new Date(todayStr() + "T00:00:00");
+  return Math.round((a - b) / 86400000);
+}
+// 剩余天数 = (addedDate + shelfLifeDays) - 今天
+function getRemaining(item) {
+  const expire = new Date(item.addedDate + "T00:00:00");
+  expire.setDate(expire.getDate() + Number(item.shelfLifeDays));
+  const expireStr = expire.toISOString().slice(0, 10);
+  return daysFromToday(expireStr);
+}
+// 信号灯状态：fresh / expiring / expired
+function getStatus(remaining) {
+  if (remaining > 3) return "fresh";      // 绿
+  if (remaining >= 1) return "expiring";  // 黄（1-3 天）
+  return "expired";                        // 红（≤0）
+}
+const STATUS_COLOR = { fresh: "#4ade80", expiring: "#facc15", expired: "#f87171" };
+
+// 是否在未来 7 天内（含今天）过期：剩余天数 0~6
+function isExpireThisWeek(remaining) { return remaining >= 0 && remaining <= 6; }
+
+/* =========================================================
+ * Module 6: i18n Apply
+ * 应用语言：更新所有 data-i18n 元素
+ * ======================================================= */
+function applyI18n() {
+  const t = I18N[State.lang];
+  // 普通文本元素（跳过 option，单独处理）
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    if (el.tagName === "OPTION") return;
+    const key = el.getAttribute("data-i18n");
+    if (t[key] !== undefined) el.textContent = t[key];
+  });
+  // 下拉选项：emoji + 翻译
+  document.querySelectorAll("option[data-i18n]").forEach(opt => {
+    const key = opt.getAttribute("data-i18n");
+    const emoji = opt.getAttribute("data-emoji") || "";
+    if (t[key] !== undefined) opt.textContent = (emoji ? emoji + " " : "") + t[key];
+  });
+  // 占位符
+  document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
+    const key = el.getAttribute("data-i18n-placeholder");
+    if (t[key] !== undefined) el.placeholder = t[key];
+  });
+  // aria-label
+  document.querySelectorAll("[data-i18n-aria]").forEach(el => {
+    const key = el.getAttribute("data-i18n-aria");
+    if (t[key] !== undefined) el.setAttribute("aria-label", t[key]);
+  });
+  document.documentElement.lang = State.lang === "ko" ? "ko" : "zh-CN";
+  document.title = t.title;
+  DOM.langBtn.textContent = State.lang === "zh" ? "한국어" : "中文";
+  updateSortLabel();   // 排序按钮文字随语言更新
+  updateShopToggle();  // 折叠/展开按钮文字随语言更新
+  updateStatsToggle(); // 统计面板折叠按钮文字随语言更新
+}
+
+/* 排序按钮文字：显示当前排序方式 */
+function updateSortLabel() {
+  const t = I18N[State.lang];
+  DOM.sortLabel.textContent = State.sortBy === "addedDate" ? t.sortByAddedDate : t.sortByRemaining;
+}
+
+/* 搜索清除按钮显隐：有内容时显示 */
+function updateClearBtn() {
+  DOM.clearSearchBtn.classList.toggle("show", State.search.length > 0);
+}
+
+/* 购物清单折叠按钮文字 */
+function updateShopToggle() {
+  const t = I18N[State.lang];
+  DOM.toggleShopBtn.textContent = State.shoppingCollapsed ? t.expand : t.collapse;
+}
+
+/* Toast：底部短暂提示 */
+let toastTimer = null;
+function toast(msg) {
+  DOM.toast.textContent = msg;
+  DOM.toast.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => DOM.toast.classList.remove("show"), 1800);
+}
+
+/* =========================================================
+ * Module 7: Render
+ * 渲染：仪表盘 + 统计行 + 食材列表 + 购物清单
+ * ======================================================= */
+function render() {
+  renderDashboard();
+  renderStatsAnalysis();
+  renderList();
+  renderShopping();
+}
+
+function renderDashboard() {
+  const t = I18N[State.lang];
+  let fresh = 0, expiring = 0, expired = 0, thisWeek = 0;
+  const locCount = { fridge: 0, freezer: 0, room: 0 };
+  State.items.forEach(it => {
+    const rem = getRemaining(it);
+    const s = getStatus(rem);
+    if (s === "fresh") fresh++;
+    else if (s === "expiring") expiring++;
+    else expired++;
+    if (isExpireThisWeek(rem)) thisWeek++;
+    const loc = LOCATION_KEYS.includes(it.location) ? it.location : "fridge";
+    locCount[loc]++;
+  });
+  $("countFresh").textContent = fresh;
+  $("countExpiring").textContent = expiring;
+  $("countExpired").textContent = expired;
+
+  // 大信号灯整体状态：有红则红（呼吸），无红有黄则黄，全绿才绿，空则灰
+  DOM.signalLight.classList.remove("green", "yellow", "red");
+  let labelKey;
+  if (State.items.length === 0) {
+    labelKey = "statusGood";
+  } else if (expired > 0) {
+    DOM.signalLight.classList.add("red");
+    labelKey = "statusDanger";
+  } else if (expiring > 0) {
+    DOM.signalLight.classList.add("yellow");
+    labelKey = "statusWarning";
+  } else {
+    DOM.signalLight.classList.add("green");
+    labelKey = "statusGood";
+  }
+  DOM.signalLabel.textContent = t[labelKey];
+
+  // ========== 统计行 ==========
+  const total = State.items.length;
+  DOM.statTotal.textContent = total;
+  DOM.statThisWeek.textContent = thisWeek;
+
+  // 浪费率 = expired / total（百分比）
+  const rate = total === 0 ? 0 : expired / total;
+  const pct = Math.round(rate * 100);
+  DOM.wasteRingText.textContent = pct + "%";
+  // SVG 周长 r=15: 2π*15 ≈ 94.2478
+  const CIRC = 94.248;
+  DOM.wasteRingFg.setAttribute("stroke-dashoffset", String(CIRC * (1 - rate)));
+  // 浪费率颜色：超过 30% 红，超过 15% 黄，否则绿
+  let wasteColor = "var(--green)";
+  if (total === 0) wasteColor = "var(--primary)";
+  else if (rate >= 0.3) wasteColor = "var(--red)";
+  else if (rate >= 0.15) wasteColor = "var(--yellow)";
+  DOM.wasteRingFg.style.stroke = wasteColor;
+
+  // ========== 存储位置分布 ==========
+  DOM.locDistItems.innerHTML = LOCATION_KEYS.map(k => {
+    const loc = LOCATIONS[k];
+    return `<span class="loc-dist-item loc-${k}">${loc.emoji} ${t[loc.i18n]} ${locCount[k]}</span>`;
+  }).join('<span class="loc-dist-sep">·</span>');
+}
+
+function renderList() {
+  const t = I18N[State.lang];
+  const q = State.search.trim().toLowerCase();
+
+  // 搜索 + 状态筛选 + 分类筛选 + 存储位置筛选 同时生效
+  let list = State.items.filter(it => {
+    if (q && !it.name.toLowerCase().includes(q)) return false;
+    if (State.categoryFilter !== "all" && it.category !== State.categoryFilter) return false;
+    if (State.locationFilter !== "all" && (it.location || "fridge") !== State.locationFilter) return false;
+    if (State.filter === "expiring") return getStatus(getRemaining(it)) === "expiring";
+    if (State.filter === "expired") return getStatus(getRemaining(it)) === "expired";
+    return true;
+  });
+
+  // 排序：默认按剩余天数升序（最危险的排最上面），可切换为按放入日期
+  if (State.sortBy === "addedDate") {
+    list.sort((a, b) => a.addedDate.localeCompare(b.addedDate));
+  } else {
+    list.sort((a, b) => getRemaining(a) - getRemaining(b));
+  }
+
+  DOM.listCount.textContent = list.length;
+  DOM.foodList.innerHTML = "";
+
+  // 空状态：根据当前筛选/搜索条件给出对应提示
+  if (list.length === 0) {
+    DOM.emptyState.style.display = "block";
+    DOM.emptyText.textContent = getEmptyMessage();
+    return;
+  }
+  DOM.emptyState.style.display = "none";
+  list.forEach(it => DOM.foodList.appendChild(buildCard(it)));
+}
+
+/* 根据当前状态生成空状态提示文案 */
+function getEmptyMessage() {
+  const t = I18N[State.lang];
+  if (State.items.length === 0) return t.emptyText;
+  if (State.search.trim()) return t.notFound + ' "' + State.search.trim() + '"';
+  if (State.filter === "expiring") return t.emptyExpiring;
+  if (State.filter === "expired") return t.emptyExpired;
+  if (State.categoryFilter !== "all") return t.emptyCategory;
+  return t.noResults;
+}
+
+function buildCard(item) {
+  const t = I18N[State.lang];
+  const remaining = getRemaining(item);
+  const status = getStatus(remaining);
+  const cat = CATEGORIES[item.category] || CATEGORIES.other;
+  const loc = LOCATIONS[item.location] || LOCATIONS.fridge;
+  const color = STATUS_COLOR[status];
+  const daysText = remaining <= 0
+    ? `${t.expiredPrefix} ${-remaining} ${t.day}`
+    : `${t.leftPrefix} ${remaining} ${t.day}`;
+  const checked = State.selectedIds.has(item.id) ? "checked" : "";
+
+  const card = document.createElement("div");
+  card.className = "food-card";
+  card.style.setProperty("--card-color", color);
+  card.dataset.id = item.id;
+  card.innerHTML = `
+    <input type="checkbox" class="cb card-check" aria-label="check" ${checked}>
+    <div class="card-main">
+      <div class="card-top">
+        <span class="card-emoji">${cat.emoji}</span>
+        <span class="card-name">${escapeHtml(item.name)}</span>
+        <span class="card-cat">${t["category_" + item.category]}</span>
+        <span class="card-loc loc-${item.location || "fridge"}">${loc.emoji} ${t[loc.i18n]}</span>
+      </div>
+      <div class="card-meta">${t.addedDate}: ${item.addedDate}</div>
+    </div>
+    <div class="card-days ${status}">${daysText}</div>
+    <div class="card-actions">
+      <button class="icon-btn edit-btn" title="${t.edit}" aria-label="${t.edit}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      </button>
+      <button class="icon-btn del del-btn" title="${t.delete}" aria-label="${t.delete}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      </button>
+    </div>
+  `;
+  return card;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+
+/* =========================================================
+ * Module 7A: PWA (SW Register + Install Prompt)
+ * 注册 Service Worker、监听安装事件、显示安装提示条
+ * ======================================================= */
+let deferredPrompt = null;
+const BANNER_DISMISS_KEY = "fridge_pwaDismissed";
+
+function showPwaBanner() {
+  // 已关闭过则不再显示（按会话 + localStorage 都关）
+  if (localStorage.getItem(BANNER_DISMISS_KEY) === "1") return;
+  DOM.pwaBanner.style.display = "flex";
+}
+function hidePwaBanner() {
+  DOM.pwaBanner.style.display = "none";
+}
+
+// 注册 Service Worker（页面加载完成后）
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) {
+    console.log("[PWA] 浏览器不支持 Service Worker。");
+    return;
+  }
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js")
+      .then((reg) => console.log("[PWA] SW 注册成功：scope =", reg.scope))
+      .catch((err) => console.error("[PWA] SW 注册失败：", err));
+  });
+}
+
+// 监听 beforeinstallprompt（可安装时触发）
+window.addEventListener("beforeinstallprompt", (e) => {
+  console.log("[PWA] beforeinstallprompt 事件触发，可安装。");
+  // 阻止 Chrome 自动弹出的地址栏安装提示
+  e.preventDefault();
+  deferredPrompt = e;
+  showPwaBanner();
+});
+
+// 用户点击“立即安装”
+function handleInstallClick() {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice
+    .then((res) => {
+      console.log("[PWA] 用户选择：", res.outcome);
+      hidePwaBanner();
+      deferredPrompt = null;
+    });
+}
+// 用户点击关闭（记录本次关闭状态）
+function handleDismissClick() {
+  localStorage.setItem(BANNER_DISMISS_KEY, "1");
+  hidePwaBanner();
+}
+
+registerServiceWorker();
+
+/* =========================================================
+ * Module 7B: Stats Analysis Charts (Chart.js)
+ * 统计分析面板：分类饼图 / 位置环形图 / 浪费率卡片 / 7天趋势折线
+ * ======================================================= */
+// 图表实例（避免重复创建 canvas）
+let categoryChartInst = null;
+let locationChartInst = null;
+let trendChartInst = null;
+
+// 分类 / 位置 配色
+const CATEGORY_COLORS = {
+  vegetable: "#4ade80", meat: "#f87171", dairy: "#60a5fa",
+  fruit: "#fbbf24", seasoning: "#a78bfa", other: "#94a3b8"
+};
+const LOCATION_COLORS = { fridge: "#38bdf8", freezer: "#bae6fd", room: "#fb923c" };
+
+// Chart.js 深色主题常量
+const CHART_TEXT_COLOR = "#94a3b8";
+const CHART_GRID_COLOR = "rgba(148, 163, 184, 0.1)";
+
+// 计算某食材的过期日期字符串 (YYYY-MM-DD)
+function getExpireDateStr(item) {
+  const d = new Date(item.addedDate + "T00:00:00");
+  d.setDate(d.getDate() + Number(item.shelfLifeDays));
+  return d.toISOString().slice(0, 10);
+}
+
+// 获取最近7天日期数组（YYYY-MM-DD），从最早到今天
+function getLast7Days() {
+  const days = [];
+  const today = new Date(todayStr() + "T00:00:00");
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    days.push(d.toISOString().slice(0, 10));
+  }
+  return days;
+}
+
+// 渲染统计分析面板：创建或更新四个图表
+function renderStatsAnalysis() {
+  const t = I18N[State.lang];
+  const items = State.items;
+  const total = items.length;
+  const hasData = total > 0;
+
+  // ===== 图表1：分类占比饼图 =====
+  const catKeys = Object.keys(CATEGORIES);
+  const catCounts = catKeys.map(k => items.filter(it => it.category === k).length);
+  const catLabels = catKeys.map((k, i) => `${CATEGORIES[k].emoji} ${t["category_" + k]} (${catCounts[i]})`);
+  const catColors = catKeys.map(k => CATEGORY_COLORS[k]);
+  DOM.categoryNoData.style.display = hasData ? "none" : "flex";
+
+  if (hasData) {
+    if (categoryChartInst) {
+      categoryChartInst.data.labels = catLabels;
+      categoryChartInst.data.datasets[0].data = catCounts;
+      categoryChartInst.data.datasets[0].backgroundColor = catColors;
+      categoryChartInst.update();
+    } else {
+      categoryChartInst = new Chart($("categoryChart"), {
+        type: "pie",
+        data: {
+          labels: catLabels,
+          datasets: [{
+            data: catCounts,
+            backgroundColor: catColors,
+            borderColor: "rgba(30, 41, 59, 0.9)",
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: "right",
+              labels: { color: CHART_TEXT_COLOR, font: { size: 11 }, padding: 10, boxWidth: 12 }
+            },
+            tooltip: {
+              backgroundColor: "rgba(30, 41, 59, 0.95)",
+              titleColor: "#f1f5f9",
+              bodyColor: CHART_TEXT_COLOR,
+              borderColor: "rgba(148, 163, 184, 0.1)",
+              borderWidth: 1
+            }
+          }
+        }
+      });
+    }
+  } else if (categoryChartInst) {
+    categoryChartInst.destroy();
+    categoryChartInst = null;
+  }
+
+  // ===== 图表2：存储位置环形图 =====
+  const locCounts = LOCATION_KEYS.map(k => items.filter(it => (it.location || "fridge") === k).length);
+  const locLabels = LOCATION_KEYS.map(k => `${LOCATIONS[k].emoji} ${t[LOCATIONS[k].i18n]}`);
+  const locColors = LOCATION_KEYS.map(k => LOCATION_COLORS[k]);
+  DOM.locationCenter.textContent = total;
+
+  if (hasData) {
+    if (locationChartInst) {
+      locationChartInst.data.labels = locLabels;
+      locationChartInst.data.datasets[0].data = locCounts;
+      locationChartInst.data.datasets[0].backgroundColor = locColors;
+      locationChartInst.update();
+    } else {
+      locationChartInst = new Chart($("locationChart"), {
+        type: "doughnut",
+        data: {
+          labels: locLabels,
+          datasets: [{
+            data: locCounts,
+            backgroundColor: locColors,
+            borderColor: "rgba(30, 41, 59, 0.9)",
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: "65%",
+          plugins: {
+            legend: {
+              position: "right",
+              labels: { color: CHART_TEXT_COLOR, font: { size: 11 }, padding: 10, boxWidth: 12 }
+            },
+            tooltip: {
+              backgroundColor: "rgba(30, 41, 59, 0.95)",
+              titleColor: "#f1f5f9",
+              bodyColor: CHART_TEXT_COLOR,
+              borderColor: "rgba(148, 163, 184, 0.1)",
+              borderWidth: 1
+            }
+          }
+        }
+      });
+    }
+  } else if (locationChartInst) {
+    locationChartInst.destroy();
+    locationChartInst = null;
+  }
+
+  // ===== 图表3：浪费率数字卡片 =====
+  let expired = 0;
+  items.forEach(it => { if (getStatus(getRemaining(it)) === "expired") expired++; });
+  const rate = total === 0 ? 0 : expired / total;
+  const pct = Math.round(rate * 100);
+  DOM.saWasteNum.textContent = pct + "%";
+  DOM.saWasteSub.textContent = `${t.expiredOfTotal} ${expired} / ${t.totalShort} ${total}`;
+  // 颜色：>30% 红，10%-30% 黄，<10% 绿
+  DOM.saWasteNum.classList.remove("green", "yellow", "red");
+  if (total === 0 || rate < 0.1) DOM.saWasteNum.classList.add("green");
+  else if (rate <= 0.3) DOM.saWasteNum.classList.add("yellow");
+  else DOM.saWasteNum.classList.add("red");
+
+  // ===== 图表4：近7天过期趋势折线图 =====
+  const days = getLast7Days();
+  const trendData = days.map(d => items.filter(it => getExpireDateStr(it) === d).length);
+  const trendLabels = days.map(d => d.slice(5)); // MM-DD
+
+  if (trendChartInst) {
+    trendChartInst.data.labels = trendLabels;
+    trendChartInst.data.datasets[0].data = trendData;
+    trendChartInst.update();
+  } else {
+    trendChartInst = new Chart($("trendChart"), {
+      type: "line",
+      data: {
+        labels: trendLabels,
+        datasets: [{
+          data: trendData,
+          borderColor: "#38bdf8",
+          backgroundColor: "rgba(56, 189, 248, 0.15)",
+          fill: true,
+          tension: 0.35,
+          pointBackgroundColor: "#38bdf8",
+          pointRadius: 4,
+          pointHoverRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: "rgba(30, 41, 59, 0.95)",
+            titleColor: "#f1f5f9",
+            bodyColor: CHART_TEXT_COLOR,
+            borderColor: "rgba(148, 163, 184, 0.1)",
+            borderWidth: 1
+          }
+        },
+        scales: {
+          x: {
+            ticks: { color: CHART_TEXT_COLOR, font: { size: 10 } },
+            grid: { color: CHART_GRID_COLOR }
+          },
+          y: {
+            beginAtZero: true,
+            ticks: { color: CHART_TEXT_COLOR, font: { size: 10 }, stepSize: 1, precision: 0 },
+            grid: { color: CHART_GRID_COLOR }
+          }
+        }
+      }
+    });
+  }
+}
+
+// 统计分析面板折叠/展开
+function toggleStatsCollapse() {
+  State.statsCollapsed = !State.statsCollapsed;
+  localStorage.setItem("fridge_statsCollapsed", State.statsCollapsed ? "1" : "0");
+  updateStatsBodyState();
+  updateStatsToggle();
+  // 展开后刷新图表（折叠时 canvas 尺寸为 0，展开后需重新渲染）
+  if (!State.statsCollapsed) {
+    setTimeout(() => renderStatsAnalysis(), 50);
+  }
+}
+function updateStatsBodyState() {
+  DOM.saBody.style.maxHeight = DOM.saBody.scrollHeight + 600 + "px";
+  requestAnimationFrame(() => {
+    DOM.saBody.classList.toggle("collapsed", State.statsCollapsed);
+  });
+}
+function updateStatsToggle() {
+  const t = I18N[State.lang];
+  DOM.saToggleBtn.textContent = State.statsCollapsed ? t.expand : t.collapse;
+}
+
+/* =========================================================
+ * Module 8: Modal (Add / Edit)
+ * 弹窗：新增与编辑
+ * ======================================================= */
+// 弹窗内临时状态：当前选中的存储位置、保质期是否被用户手动修改过
+let modalLocation = "fridge";
+let modalShelfEdited = false;
+
+// 设置弹窗中选中的存储位置（同步按钮高亮 + 联动保质期）
+function setModalLocation(loc) {
+  if (!LOCATION_KEYS.includes(loc)) loc = "fridge";
+  modalLocation = loc;
+  DOM.locBtnGroup.querySelectorAll(".loc-btn").forEach(b => {
+    b.classList.toggle("active", b.dataset.loc === loc);
+  });
+  // 不可用位置提示（如肉类室温、乳制品冷冻）
+  const preset = getShelfPreset(DOM.inpCategory.value, loc);
+  DOM.locWarn.style.display = preset === null ? "block" : "none";
+  // 联动保质期：用户未手动修改时，自动填入预设
+  if (!modalShelfEdited && preset !== null) {
+    DOM.inpShelfLife.value = preset;
+  }
+}
+
+function openModal(mode, id) {
+  const t = I18N[State.lang];
+  modalShelfEdited = false; // 重置手动编辑标记
+  if (mode === "edit") {
+    const it = State.items.find(x => x.id === id);
+    if (!it) return;
+    DOM.modalTitle.textContent = t.modalEditTitle;
+    DOM.inpName.value = it.name;
+    DOM.inpCategory.value = it.category;
+    DOM.inpAddedDate.value = it.addedDate;
+    DOM.inpShelfLife.value = it.shelfLifeDays;
+    // 编辑模式下保留食材原有保质期，切换分类/位置不自动覆盖
+    modalShelfEdited = true;
+    setModalLocation(it.location || "fridge");
+    State.editingId = id;
+  } else {
+    DOM.modalTitle.textContent = t.modalAddTitle;
+    DOM.foodForm.reset();
+    DOM.inpAddedDate.value = todayStr();
+    DOM.inpCategory.value = "vegetable";
+    setModalLocation("fridge"); // 默认冷藏，会联动填入蔬菜冷藏保质期
+    State.editingId = null;
+  }
+  DOM.modalMask.classList.add("show");
+}
+
+function closeModal() {
+  DOM.modalMask.classList.remove("show");
+  State.editingId = null;
+}
+
+function handleSubmit(e) {
+  e.preventDefault();
+  const name = DOM.inpName.value.trim();
+  const category = DOM.inpCategory.value;
+  const addedDate = DOM.inpAddedDate.value;
+  const shelfLifeDays = parseInt(DOM.inpShelfLife.value, 10);
+  const location = modalLocation;
+  if (!name || !addedDate || !shelfLifeDays || shelfLifeDays < 1) return;
+
+  if (State.editingId) {
+    const it = State.items.find(x => x.id === State.editingId);
+    if (it) Object.assign(it, { name, category, addedDate, shelfLifeDays, location });
+  } else {
+    State.items.push({
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      name, category, addedDate, shelfLifeDays, location
+    });
+  }
+  saveItems();
+  closeModal();
+  render();
+}
+
+/* =========================================================
+ * Module 9: Delete (with fade-out animation)
+ * 删除：确认后卡片淡出收缩再移除
+ * ======================================================= */
+function handleDelete(id) {
+  if (!confirm(I18N[State.lang].confirmDelete)) return;
+  const card = DOM.foodList.querySelector(`.food-card[data-id="${id}"]`);
+  if (card) {
+    card.classList.add("removing");
+    setTimeout(() => {
+      State.items = State.items.filter(x => x.id !== id);
+      State.selectedIds.delete(id);
+      saveItems();
+      render();
+    }, 300);
+  } else {
+    State.items = State.items.filter(x => x.id !== id);
+    State.selectedIds.delete(id);
+    saveItems();
+    render();
+  }
+}
+
+/* =========================================================
+ * Module 9B: Shopping List
+ * 购物清单：加入、勾选已购买、清除已购买、折叠/展开
+ * ======================================================= */
+// 把勾选的食材加入购物清单（去重）
+function addCheckedToShopping() {
+  const t = I18N[State.lang];
+  if (State.selectedIds.size === 0) { toast(t.selectToAdd); return; }
+  let added = 0, skipped = 0;
+  State.selectedIds.forEach(id => {
+    const it = State.items.find(x => x.id === id);
+    if (!it) return;
+    if (State.shoppingList.some(s => s.id === it.id)) { skipped++; return; }
+    State.shoppingList.push({
+      id: it.id, name: it.name, category: it.category, bought: false
+    });
+    added++;
+  });
+  saveShoppingList();
+  State.selectedIds.clear();
+  // 购物清单不为空时，自动展开
+  if (State.shoppingCollapsed) { toggleShoppingCollapse(true); }
+  render();
+  if (added > 0) toast(added + " " + t.addedToList);
+  if (skipped > 0) toast(skipped + " " + t.alreadyInList);
+}
+
+// 切换购物清单折叠状态（forceExpand=true 时强制展开）
+function toggleShoppingCollapse(forceExpand) {
+  if (forceExpand === true) State.shoppingCollapsed = false;
+  else State.shoppingCollapsed = !State.shoppingCollapsed;
+  localStorage.setItem("fridge_shopCollapsed", State.shoppingCollapsed ? "1" : "0");
+  updateShopBodyState();
+  updateShopToggle();
+}
+function updateShopBodyState() {
+  // 给 max-height 一个足够大的值以实现过渡
+  DOM.shoppingBody.style.maxHeight = DOM.shoppingBody.scrollHeight + 200 + "px";
+  requestAnimationFrame(() => {
+    if (State.shoppingCollapsed) DOM.shoppingBody.classList.add("collapsed");
+    else DOM.shoppingBody.classList.remove("collapsed");
+  });
+}
+
+// 清除已购买
+function clearBought() {
+  State.shoppingList = State.shoppingList.filter(s => !s.bought);
+  saveShoppingList();
+  renderShopping();
+}
+
+// 渲染购物清单
+function renderShopping() {
+  const t = I18N[State.lang];
+  // 更新数字
+  DOM.shopCount.textContent = State.shoppingList.length;
+  // 折叠状态
+  updateShopBodyState();
+  // 内容
+  DOM.shoppingInner.innerHTML = "";
+  if (State.shoppingList.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "shop-empty";
+    empty.textContent = t.shoppingListEmpty;
+    DOM.shoppingInner.appendChild(empty);
+    return;
+  }
+  State.shoppingList.forEach(s => {
+    const cat = CATEGORIES[s.category] || CATEGORIES.other;
+    const row = document.createElement("div");
+    row.className = "shop-item" + (s.bought ? " bought" : "");
+    row.dataset.shopId = s.id;
+    row.innerHTML = `
+      <input type="checkbox" class="cb" ${s.bought ? "checked" : ""} aria-label="check">
+      <span class="shop-emoji">${cat.emoji}</span>
+      <span class="shop-name">${escapeHtml(s.name)}</span>
+      <span class="shop-cat">${t["category_" + s.category]}</span>
+    `;
+    DOM.shoppingInner.appendChild(row);
+  });
+  // 购物清单项勾选事件
+  DOM.shoppingInner.querySelectorAll(".shop-item").forEach(row => {
+    const id = row.dataset.shopId;
+    const cb = row.querySelector(".cb");
+    cb.addEventListener("change", () => {
+      const it = State.shoppingList.find(s => s.id === id);
+      if (it) { it.bought = cb.checked; }
+      row.classList.toggle("bought", cb.checked);
+      saveShoppingList();
+    });
+  });
+}
+
+/* =========================================================
+ * Module 9C: Import / Export
+ * 导出 / 导入 JSON 数据
+ * ======================================================= */
+function exportData() {
+  const payload = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    items: State.items,
+    shoppingList: State.shoppingList
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const dateStr = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = `fridge-backup-${dateStr}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  const t = I18N[State.lang];
+  toast(t.exportData);
+}
+
+function importData(file) {
+  if (!file) return;
+  const t = I18N[State.lang];
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data || !Array.isArray(data.items)) throw new Error("invalid");
+      if (!confirm(t.importConfirm)) return;
+      State.items = data.items;
+      // 迁移：导入数据也补默认 location
+      State.items.forEach(it => {
+        if (!it.location || !LOCATION_KEYS.includes(it.location)) it.location = "fridge";
+      });
+      State.shoppingList = Array.isArray(data.shoppingList) ? data.shoppingList : [];
+      saveItems();
+      saveShoppingList();
+      render();
+      toast(t.importSuccess);
+    } catch {
+      toast(t.importFailed);
+    } finally {
+      DOM.importFile.value = "";
+    }
+  };
+  reader.readAsText(file, "utf-8");
+}
+
+/* =========================================================
+ * Module 10: Language Switch with Fade Transition
+ * 语言切换：0.3 秒淡入淡出过渡
+ * ======================================================= */
+function switchLanguage() {
+  const fadeEls = [DOM.dashboard, DOM.statsAnalysis, DOM.actionBar, DOM.foodListSection, DOM.shoppingSection];
+  fadeEls.forEach(el => el.classList.add("fade-out"));
+  setTimeout(() => {
+    State.lang = State.lang === "zh" ? "ko" : "zh";
+    localStorage.setItem("fridge_lang", State.lang);
+    applyI18n();
+    render(); // 重新渲染卡片文字
+    fadeEls.forEach(el => el.classList.remove("fade-out"));
+  }, 300);
+}
+
+/* =========================================================
+ * Module 11: Event Bindings
+ * 事件绑定
+ * ======================================================= */
+function bindEvents() {
+  DOM.langBtn.addEventListener("click", switchLanguage);
+  DOM.addBtn.addEventListener("click", () => openModal("add", null));
+  DOM.cancelBtn.addEventListener("click", closeModal);
+  DOM.modalMask.addEventListener("click", e => { if (e.target === DOM.modalMask) closeModal(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
+
+  // 表单提交
+  DOM.foodForm.addEventListener("submit", handleSubmit);
+
+  // 分类变化时联动保质期（用户未手动修改时）
+  DOM.inpCategory.addEventListener("change", () => {
+    const preset = getShelfPreset(DOM.inpCategory.value, modalLocation);
+    DOM.locWarn.style.display = preset === null ? "block" : "none";
+    if (!modalShelfEdited && preset !== null) {
+      DOM.inpShelfLife.value = preset;
+    }
+  });
+
+  // 存储位置按钮点击
+  DOM.locBtnGroup.addEventListener("click", e => {
+    const btn = e.target.closest(".loc-btn");
+    if (!btn) return;
+    setModalLocation(btn.dataset.loc);
+  });
+
+  // 保质期手动编辑：标记后不再自动覆盖
+  DOM.inpShelfLife.addEventListener("input", () => {
+    modalShelfEdited = true;
+  });
+
+  // 搜索：实时过滤 + 持久化 + 显隐清除按钮
+  DOM.searchInput.addEventListener("input", e => {
+    State.search = e.target.value;
+    localStorage.setItem("fridge_search", State.search);
+    updateClearBtn();
+    renderList();
+  });
+  // 清除搜索
+  DOM.clearSearchBtn.addEventListener("click", () => {
+    State.search = "";
+    DOM.searchInput.value = "";
+    localStorage.setItem("fridge_search", "");
+    updateClearBtn();
+    renderList();
+  });
+
+  // 分类筛选下拉
+  DOM.categoryFilter.addEventListener("change", e => {
+    State.categoryFilter = e.target.value;
+    localStorage.setItem("fridge_catFilter", State.categoryFilter);
+    renderList();
+  });
+
+  // 排序切换：在「按剩余天数」与「按放入日期」之间切换
+  DOM.sortBtn.addEventListener("click", () => {
+    State.sortBy = State.sortBy === "remaining" ? "addedDate" : "remaining";
+    localStorage.setItem("fridge_sort", State.sortBy);
+    updateSortLabel();
+    renderList();
+  });
+
+  // 状态筛选按钮（全部 / 快过期 / 已过期）—— 限定在 statusFilter 组内
+  const statusFilter = $("statusFilter");
+  statusFilter.querySelectorAll(".filter-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      statusFilter.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      State.filter = btn.dataset.filter;
+      localStorage.setItem("fridge_filter", State.filter);
+      renderList();
+    });
+  });
+
+  // 存储位置筛选按钮（全部位置 / 冷藏 / 冷冻 / 室温）
+  DOM.locationFilter.querySelectorAll("[data-locfilter]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      DOM.locationFilter.querySelectorAll("[data-locfilter]").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      State.locationFilter = btn.dataset.locfilter;
+      localStorage.setItem("fridge_locFilter", State.locationFilter);
+      renderList();
+    });
+  });
+
+  // 食材卡片事件委托（勾选 / 编辑 / 删除）
+  DOM.foodList.addEventListener("change", e => {
+    const cb = e.target.closest(".food-card .card-check");
+    if (!cb) return;
+    const card = e.target.closest(".food-card");
+    if (!card) return;
+    const id = card.dataset.id;
+    if (cb.checked) State.selectedIds.add(id);
+    else State.selectedIds.delete(id);
+  });
+  DOM.foodList.addEventListener("click", e => {
+    const card = e.target.closest(".food-card");
+    if (!card) return;
+    // 避免与复选框 change 冲突
+    if (e.target.closest(".card-check")) return;
+    const id = card.dataset.id;
+    if (e.target.closest(".edit-btn")) openModal("edit", id);
+    else if (e.target.closest(".del-btn")) handleDelete(id);
+  });
+
+  // ====== 购物清单 ======
+  DOM.addShopBtn.addEventListener("click", addCheckedToShopping);
+  DOM.toggleShopBtn.addEventListener("click", () => toggleShoppingCollapse());
+  DOM.clearBoughtBtn.addEventListener("click", clearBought);
+
+  // ====== 统计分析面板折叠 ======
+  DOM.saHeader.addEventListener("click", (e) => {
+    // 避免点击按钮时触发两次
+    if (e.target === DOM.saToggleBtn) return;
+    toggleStatsCollapse();
+  });
+  DOM.saToggleBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleStatsCollapse();
+  });
+
+  // ====== PWA 安装提示条 ======
+  DOM.pwaInstallBtn.addEventListener("click", handleInstallClick);
+  DOM.pwaDismissBtn.addEventListener("click", handleDismissClick);
+
+  // ====== 设置菜单 ======
+  DOM.settingsBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    DOM.settingsMenu.classList.toggle("show");
+  });
+  // 点击外部关闭设置菜单
+  document.addEventListener("click", (e) => {
+    if (!DOM.settingsMenu.contains(e.target) && e.target !== DOM.settingsBtn) {
+      DOM.settingsMenu.classList.remove("show");
+    }
+  });
+  DOM.exportBtn.addEventListener("click", () => {
+    DOM.settingsMenu.classList.remove("show");
+    exportData();
+  });
+  DOM.importFile.addEventListener("change", (e) => {
+    DOM.settingsMenu.classList.remove("show");
+    const file = e.target.files && e.target.files[0];
+    importData(file);
+  });
+}
+
+/* =========================================================
+ * Module 12: Init
+ * 初始化
+ * ======================================================= */
+function init() {
+  applyI18n();
+  // 恢复持久化的搜索 / 筛选 / 排序状态到界面
+  DOM.searchInput.value = State.search;
+  DOM.categoryFilter.value = State.categoryFilter;
+  // 状态筛选按钮高亮恢复（限定 statusFilter 组）
+  $("statusFilter").querySelectorAll(".filter-btn").forEach(b => {
+    b.classList.toggle("active", b.dataset.filter === State.filter);
+  });
+  // 存储位置筛选按钮高亮恢复
+  DOM.locationFilter.querySelectorAll("[data-locfilter]").forEach(b => {
+    b.classList.toggle("active", b.dataset.locfilter === State.locationFilter);
+  });
+  updateClearBtn();
+  updateSortLabel();
+  updateShopToggle();
+  updateStatsToggle();
+  // 折叠初始化（立即设置 collapsed 类，不要触发过渡）
+  if (State.shoppingCollapsed) {
+    DOM.shoppingBody.classList.add("collapsed");
+    DOM.shoppingBody.style.maxHeight = "0px";
+  }
+  // 统计面板折叠初始化
+  if (State.statsCollapsed) {
+    DOM.saBody.classList.add("collapsed");
+    DOM.saBody.style.maxHeight = "0px";
+  }
+  bindEvents();
+  render();
+}
+
+init();
+</script>
+</body>
+</html>
